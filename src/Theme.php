@@ -28,6 +28,7 @@ declare(strict_types=1);
 namespace PentagonalProject\SlimService;
 
 use Psr\Container\ContainerInterface;
+use Psr\Http\Message\ResponseInterface;
 use Slim\Http\Request;
 use Slim\Http\Response;
 use Slim\Http\Uri;
@@ -183,6 +184,34 @@ class Theme
 
     /**
      * @param string $file
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
+     */
+    public function loadResponse(string $file, ResponseInterface $response) : ResponseInterface
+    {
+        return $this->includeResponse('load', $file, $response);
+    }
+
+    /**
+     * @param string $method
+     * @param string $file
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
+     */
+    private function includeResponse(string $method, string $file, ResponseInterface $response) : ResponseInterface
+    {
+        ob_start();
+        $content = ob_get_clean();
+        $this->$method($file);
+        $body = $response->getBody();
+        $body->write($content);
+        return $response->withBody($body);
+    }
+
+    /**
+     * @param string $file
      *
      * @return mixed
      */
@@ -206,6 +235,17 @@ class Theme
 
     /**
      * @param string $file
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
+     */
+    public function loadIgnoreResponse(string $file, ResponseInterface $response) : ResponseInterface
+    {
+        return $this->includeResponse('loadIgnore', $file, $response);
+    }
+
+    /**
+     * @param string $file
      *
      * @return bool|mixed
      */
@@ -220,6 +260,17 @@ class Theme
 
     /**
      * @param string $file
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
+     */
+    public function onceResponse(string $file, ResponseInterface $response) : ResponseInterface
+    {
+        return $this->includeResponse('once', $file, $response);
+    }
+
+    /**
+     * @param string $file
      *
      * @return bool|mixed
      */
@@ -230,6 +281,17 @@ class Theme
         }
 
         return false;
+    }
+
+    /**
+     * @param string $file
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
+     */
+    public function onceIgnoreResponse(string $file, ResponseInterface $response) : ResponseInterface
+    {
+        return $this->includeResponse('onceIgnore', $file, $response);
     }
 
     /**
