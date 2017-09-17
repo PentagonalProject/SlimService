@@ -252,7 +252,7 @@ class Hook
         /**
          * Sorting
          */
-        if (isset($this->merged[$hookName])) {
+        if (! isset($this->merged[$hookName])) {
             ksort($this->filters[$hookName]);
             $this->merged[$hookName] = true;
         }
