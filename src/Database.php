@@ -203,6 +203,35 @@ class Database
          * Merge User Param
          */
         $this->currentUserParams = array_merge($this->currentUserParams, $configs);
+
+        /**
+         * Auto fix for config parameter user
+         */
+        if (!isset($this->currentUserParams['user']) && isset($this->currentUserParams['dbuser'])) {
+            $this->currentUserParams['user'] = $this->currentUserParams['dbuser'];
+        }
+
+        /**
+         * Auto fix for config parameter password
+         */
+        if (!isset($this->currentUserParams['password']) && isset($this->currentUserParams['dbpass'])) {
+            $this->currentUserParams['password'] = $this->currentUserParams['dbpass'];
+        }
+
+        /**
+         * Auto fix for config parameter driver
+         */
+        if (!isset($this->currentUserParams['driver']) && isset($this->currentUserParams['dbdriver'])) {
+            $this->currentUserParams['driver'] = $this->currentUserParams['dbdriver'];
+        }
+
+        /**
+         * Auto fix for config parameter driver
+         */
+        if (!isset($this->currentUserParams['port']) && isset($this->currentUserParams['dbport'])) {
+            $this->currentUserParams['driver'] = $this->currentUserParams['dbport'];
+        }
+
         if (empty($this->currentUserParams['driver'])
             && isset($this->currentUserParams['port'])
             && $this->currentUserParams['port'] == 3306
