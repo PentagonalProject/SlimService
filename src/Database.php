@@ -229,7 +229,7 @@ class Database
          * Auto fix for config parameter driver
          */
         if (!isset($this->currentUserParams['port']) && isset($this->currentUserParams['dbport'])) {
-            $this->currentUserParams['driver'] = $this->currentUserParams['dbport'];
+            $this->currentUserParams['port'] = $this->currentUserParams['dbport'];
         }
 
         if (empty($this->currentUserParams['driver'])
