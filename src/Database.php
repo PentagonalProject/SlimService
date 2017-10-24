@@ -176,8 +176,7 @@ class Database
      * @var array
      */
     protected $currentUserParams = [
-        'charset' => 'utf8',
-        'collate' => 'utf8_unicode_ci', // 'utf_general_ci'
+        self::DB_CHARSET => self::DEFAULT_CHARSET,
     ];
 
     /**
@@ -193,6 +192,39 @@ class Database
     protected $currentQuoteIdentifier = '"';
 
     /**
+     * Default Driver
+     *
+     * @var string
+     */
+    protected $defaultDriver = 'mysql';
+
+    /**
+     * Default character Set
+     */
+    const DEFAULT_CHARSET = 'UTF8';
+
+    /**
+     * Setting
+     */
+    const
+        DB_HOST = 'host',
+        DB_USER = 'user',
+        DB_NAME = 'dbname',
+        DB_PASSWORD = 'password',
+        DB_DRIVER   = 'driver',
+        DB_PATH     = 'path',
+        DB_PORT     = 'port',
+        DB_PREFIX   = 'prefix',
+        DB_PROTOCOL = 'protocol',
+        DB_CHARSET  = 'charset',
+        DB_COLLATE  = 'collate';
+
+    /**
+     * @var array
+     */
+    protected static $lastParams;
+
+    /**
      * Database constructor.
      * @param array $configs database Configuration
      * @throws DBALException
@@ -202,131 +234,33 @@ class Database
         /**
          * Merge User Param
          */
-        $this->currentUserParams = array_merge($this->currentUserParams, $configs);
+        $this->currentUserParams = $this->normalizeDatabaseParams($configs);
 
         /**
-         * Auto fix for config parameter user
+         * Re-Sanitize Selected Driver
          */
-        if (!isset($this->currentUserParams['user']) && isset($this->currentUserParams['dbuser'])) {
-            $this->currentUserParams['user'] = $this->currentUserParams['dbuser'];
-        }
-
-        /**
-         * Auto fix for config parameter password
-         */
-        if (!isset($this->currentUserParams['password']) && isset($this->currentUserParams['dbpass'])) {
-            $this->currentUserParams['password'] = $this->currentUserParams['dbpass'];
-        }
-
-        /**
-         * Auto fix for config parameter driver
-         */
-        if (!isset($this->currentUserParams['driver']) && isset($this->currentUserParams['dbdriver'])) {
-            $this->currentUserParams['driver'] = $this->currentUserParams['dbdriver'];
-        }
-
-        /**
-         * Auto fix for config parameter driver
-         */
-        if (!isset($this->currentUserParams['port']) && isset($this->currentUserParams['dbport'])) {
-            $this->currentUserParams['port'] = $this->currentUserParams['dbport'];
-        }
-
-        if (empty($this->currentUserParams['driver'])
-            && isset($this->currentUserParams['port'])
-            && $this->currentUserParams['port'] == 3306
-        ) {
-            $this->currentUserParams['driver'] = 'mysql';
-        }
-
-        if (!isset($this->currentUserParams['driver'])) {
-            throw new DBALException('Driver must be declare.', E_USER_ERROR);
-        }
-        if (! is_string($this->currentUserParams['driver'])) {
-            throw new DBALException('Driver must as a string.', E_USER_ERROR);
-        }
-
-        if (isset($this->currentUserParams['port'])) {
-            if ($this->currentUserParams['port']) {
-                if (!is_numeric($this->currentUserParams['port'])) {
-                    throw new DBALException('Invalid database port.', E_USER_ERROR);
-                }
-            } else {
-                unset($this->currentUserParams['port']);
-            }
-        }
-
-        /**
-         * Sanitize Selected Driver
-         */
-        $this->currentSelectedDriver = $this
-            ->sanitizeSelectedAvailableDriver($this->currentUserParams['driver']);
+        $this->currentSelectedDriver = is_string($this->currentUserParams[self::DB_DRIVER])
+            ? $this->normalizeDatabaseDriver($this->currentUserParams[self::DB_DRIVER])
+            : null;
         if (!$this->currentSelectedDriver) {
             throw new DBALException('Selected driver unavailable.', E_USER_ERROR);
         }
-
-        if (isset($this->currentUserParams['prefix']) && is_string($this->currentUserParams['prefix'])) {
-            $this->currentUserParams['prefix'] = trim($this->currentUserParams['prefix']);
-            $this->currentTablePrefix = (string) $this->currentUserParams['prefix'];
-        }
-        if (isset($this->currentUserParams['dbname']) && !isset($this->currentUserParams['name'])) {
-            $this->currentUserParams['name'] = $this->currentUserParams['dbname'];
-        }
-
-        if ((!isset($this->currentUserParams['name']) || !is_string($this->currentUserParams['name']))
-            && $this->currentSelectedDriver != 'pdo_sqlite'
-        ) {
-            throw new DBALException('Invalid Database Name.', E_USER_ERROR);
-        }
-
-        if ($this->currentSelectedDriver == 'pdo_sqlite' && !isset($this->currentUserParams['path'])) {
-            if (!isset($this->currentUserParams['name']) || !is_string($this->currentUserParams['name'])) {
-                throw new DBALException('SQLite database path must be not empty.', E_USER_ERROR);
-            }
-            $this->currentUserParams['path'] = $this->currentUserParams['name'];
-        }
-
-        $this->currentUserParams['dbname'] = $this->currentUserParams['name'];
-        unset($this->currentUserParams['name']);
-
-        if (is_string($this->currentUserParams['charset'])
-            && strpos($this->currentUserParams['charset'], '-')
-        ) {
-            $this->currentUserParams['charset'] = str_replace(
-                '-',
-                '',
-                trim(strtolower($this->currentUserParams['charset']))
-            );
-        }
-
-        if (!is_string($this->currentUserParams['charset'])
-            || trim($this->currentUserParams['charset']) == ''
-        ) {
-            $charset = 'utf8';
-            if (isset($this->currentUserParams['collate'])) {
-                $collate = $this->currentUserParams['collate'];
-                if (!is_string($collate)) {
-                    $collate = 'utf8_unicode_ci';
-                }
-                $collate = preg_replace('`(\-|\_)+`', '_', $collate);
-                $collate = trim(strtolower($collate));
-                $this->currentUserParams['collate'] = $collate;
-                $collateArray = explode('_', $collate);
-                $charset = reset($collateArray);
-            }
-
-            $this->currentUserParams['charset'] = $charset;
+        if (empty($this->currentUserParams[self::DB_NAME])) {
+            throw new DBALException('Database Name could not be empty.', E_USER_ERROR);
         }
 
         /**
          * create new parameters
          */
-        $this->currentUserParams['driver'] = $this->currentSelectedDriver;
+        $this->currentUserParams[self::DB_DRIVER] = $this->currentSelectedDriver;
 
         /**
          * Create New Connection
          */
         $this->currentConnection = DriverManager::getConnection($this->currentUserParams);
+
+        // set last params
+        static::$lastParams = $this->currentUserParams;
 
         /**
          * Set Quote Identifier
@@ -335,6 +269,213 @@ class Database
             ->currentConnection
             ->getDatabasePlatform()
             ->getIdentifierQuoteCharacter();
+    }
+
+    /**
+     * Instance Database
+     *
+     * @param array $config
+     *
+     * @return Database
+     */
+    public static function create(array $config = null) : Database
+    {
+        return !is_array($config)
+            // fallback to last param
+            ? static::createLastParams()
+            : new static($config);
+    }
+
+    /**
+     * Create From last Parameter
+     *
+     * @return Database
+     */
+    public static function createLastParams() : Database
+    {
+        if (empty(static::$lastParams)) {
+            throw new \RuntimeException(
+                'Database not being init before',
+                E_WARNING
+            );
+        }
+
+        return new static(static::$lastParams);
+    }
+
+    /**
+     * Normalize Configurations Param
+     *
+     * @param array $configs
+     *
+     * @return array
+     */
+    final public function normalizeDatabaseParams(array $configs) : array
+    {
+        if (empty($configs)) {
+            return $configs;
+        }
+
+        /**
+         * Merge User Param
+         */
+        $currentUserParams = array_merge($this->currentUserParams, $configs);
+
+        $toSanity = [
+            self::DB_HOST => 'dbhost',
+            self::DB_USER => 'dbuser',
+            self::DB_NAME => 'name',
+            self::DB_PASSWORD => 'dbpass',
+            self::DB_DRIVER   => 'dbdriver',
+            self::DB_PATH     => 'dbpath',
+            self::DB_PORT     => 'dbport',
+            self::DB_PREFIX   => 'dbprefix',
+            self::DB_PROTOCOL => 'dbprotocol',
+            self::DB_CHARSET  => 'dbcharset',
+            self::DB_COLLATE  => 'dbcollate'
+        ];
+        foreach ($toSanity as $key => $name) {
+            if ($key === $name) {
+                continue;
+            }
+            if (!isset($currentUserParams[$key]) && isset($currentUserParams[$name])) {
+                $currentUserParams[$key] = $currentUserParams[$name];
+                unset($currentUserParams[$name]);
+            }
+        }
+
+        // re-sanitize
+        if (!isset($currentUserParams[self::DB_PASSWORD]) && isset($currentUserParams['dbpassword'])) {
+            $currentUserParams[self::DB_PASSWORD] = $currentUserParams['dbpassword'];
+            unset($currentUserParams['dbpassword']);
+        }
+
+        /**
+         * check if port in 3306 & empty driver
+         */
+        if (empty($currentUserParams[self::DB_DRIVER])
+            && isset($currentUserParams[self::DB_PORT])
+            && abs($currentUserParams[self::DB_PORT]) === 3306
+        ) {
+            $currentUserParams[self::DB_DRIVER] = 'mysql';
+        }
+        if (empty($currentUserParams[self::DB_DRIVER])) {
+            $currentUserParams[self::DB_DRIVER] = $this->defaultDriver;
+        }
+
+        if (!empty($currentUserParams[self::DB_DRIVER])) {
+            $currentUserParams[self::DB_DRIVER] = $this
+                ->normalizeDatabaseDriver($this->currentUserParams[self::DB_DRIVER]);
+        }
+
+        if (!empty($currentUserParams[self::DB_DRIVER])
+            && $currentUserParams[self::DB_DRIVER] == 'pdo_sqlite'
+        ) {
+            if (empty($currentUserParams[self::DB_PATH])) {
+                if (is_string($currentUserParams[self::DB_NAME])
+                    && isset($currentUserParams[self::DB_NAME])
+                ) {
+                    $currentUserParams[self::DB_PATH] = $currentUserParams[self::DB_NAME];
+                }
+            } elseif (empty($currentUserParams[self::DB_NAME])) {
+                if (is_string($currentUserParams[self::DB_PATH])
+                    && isset($currentUserParams[self::DB_PATH])
+                ) {
+                    $currentUserParams[self::DB_NAME] = $currentUserParams[self::DB_PATH];
+                }
+            }
+        }
+
+        $charset = self::DEFAULT_CHARSET;
+        if (is_string($currentUserParams[self::DB_CHARSET])
+            && strpos($currentUserParams[self::DB_CHARSET], '-') !== false
+        ) {
+            $currentUserParams[self::DB_CHARSET] = str_replace(
+                '-',
+                '',
+                trim(strtoupper($currentUserParams[self::DB_CHARSET]))
+            );
+        }
+
+        if (isset($currentUserParams[self::DB_COLLATE])) {
+            $collate = isset($currentUserParams[self::DB_COLLATE])
+                ? $currentUserParams[self::DB_COLLATE]
+                : null;
+            if (!is_string($collate) && $currentUserParams[self::DB_DRIVER] === 'mysql') {
+                $collate = 'utf8_unicode_ci';
+            }
+            $collate = preg_replace('`(\-|\_)+`', '_', $collate);
+            $collate = trim(strtolower($collate));
+            $collateArray = explode('_', $collate);
+            $charset = reset($collateArray)?: $charset;
+        }
+
+        if (!is_string($currentUserParams[self::DB_CHARSET])
+            || trim($currentUserParams[self::DB_CHARSET]) === ''
+        ) {
+            $currentUserParams[self::DB_CHARSET] = $charset;
+        }
+
+        return $currentUserParams;
+    }
+
+    /**
+     * Aliases
+     *
+     * please @uses normalizeDatabaseDriver()
+     *
+     * @param string $driver
+     *
+     * @return bool|string
+     */
+    final public function sanitizeSelectedAvailableDriver(string $driver)
+    {
+        return $this->normalizeDatabaseDriver($driver);
+    }
+
+    /**
+     * Check Database driver available for Doctrine
+     * and choose the best driver of sqlsrv an oci
+     *
+     * @param string $driverName
+     * @final
+     * @return bool|string return lowercase an fix database driver for Connection
+     */
+    final public function normalizeDatabaseDriver(string $driverName)
+    {
+        if (is_string($driverName) && trim($driverName)) {
+            $driverName = trim(strtolower($driverName));
+            /**
+             * switch to Doctrine fixed db
+             * Aliases
+             */
+            $driverSchemeAliases = [
+                'db2'        => 'ibm_db2',
+                'drizzle'    => 'drizzle_pdo_mysql',
+                'mssql'      => 'pdo_sqlsrv',
+                'mysql'      => 'pdo_mysql',
+                'mysql2'     => 'pdo_mysql', // Amazon RDS, for some weird reason
+                'postgre'    => 'pdo_pgsql',
+                'postgre_sql'=> 'pdo_pgsql',
+                'postgres'   => 'pdo_pgsql',
+                'postgresql' => 'pdo_pgsql',
+                'pgsql'      => 'pdo_pgsql',
+                'sqlite'     => 'pdo_sqlite',
+                'sqlite3'    => 'pdo_sqlite',
+                'oci'        => 'oci8',
+                'pdo_oci'    => 'oci8',   # recommendation pdo_oci uses oci8
+                'pdo_sqlsrv' => 'sqlsrv', #recommendation pdo_sqlsrv uses sqlsrv
+            ];
+            if (isset($driverSchemeAliases[$driverName])) {
+                $driverName = $driverSchemeAliases[$driverName];
+            }
+
+            if (in_array($driverName, DriverManager::getAvailableDrivers())) {
+                return $driverName;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -385,51 +526,6 @@ class Database
     public function getConnectionParams() : array
     {
         return $this->getParams();
-    }
-
-    /**
-     * Check Database driver available for Doctrine
-     * and choose the best driver of sqlsrv an oci
-     *
-     * @param string $driverName
-     * @final
-     * @return bool|string return lowercase an fix database driver for Connection
-     */
-    final public function sanitizeSelectedAvailableDriver(string $driverName)
-    {
-        if (is_string($driverName) && trim($driverName)) {
-            $driverName = trim(strtolower($driverName));
-            /**
-             * switch to Doctrine fixed db
-             * Aliases
-             */
-            $driverSchemeAliases = [
-                'db2'        => 'ibm_db2',
-                'drizzle'    => 'drizzle_pdo_mysql',
-                'mssql'      => 'pdo_sqlsrv',
-                'mysql'      => 'pdo_mysql',
-                'mysql2'     => 'pdo_mysql', // Amazon RDS, for some weird reason
-                'postgre'    => 'pdo_pgsql',
-                'postgre_sql'=> 'pdo_pgsql',
-                'postgres'   => 'pdo_pgsql',
-                'postgresql' => 'pdo_pgsql',
-                'pgsql'      => 'pdo_pgsql',
-                'sqlite'     => 'pdo_sqlite',
-                'sqlite3'    => 'pdo_sqlite',
-                'oci'        => 'oci8',
-                'pdo_oci'    => 'oci8',   # recommendation pdo_oci uses oci8
-                'pdo_sqlsrv' => 'sqlsrv', #recommendation pdo_sqlsrv uses sqlsrv
-            ];
-            if (isset($driverSchemeAliases[$driverName])) {
-                $driverName = $driverSchemeAliases[$driverName];
-            }
-
-            if (in_array($driverName, DriverManager::getAvailableDrivers())) {
-                return $driverName;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -832,7 +928,7 @@ class Database
      *
      * @return array
      */
-    public function listTableNames()
+    public function listTableNames() : array
     {
         return $this
             ->getSchemaManager()
@@ -844,7 +940,7 @@ class Database
      *
      * @return Table[]
      */
-    public function listTables()
+    public function listTables() : array
     {
         return $this
             ->getSchemaManager()
@@ -858,7 +954,7 @@ class Database
      *
      * @return Table
      */
-    public function listTableDetails(string $tableName)
+    public function listTableDetails(string $tableName) : Table
     {
         $tableName = $this->tableMaybeInvalid($tableName);
         return $this->getSchemaManager()->listTableDetails($tableName);
@@ -869,7 +965,7 @@ class Database
      *
      * @return View[]
      */
-    public function listViews()
+    public function listViews() : array
     {
         return $this->getSchemaManager()->listViews();
     }
@@ -881,7 +977,7 @@ class Database
      *
      * @return ForeignKeyConstraint[]
      */
-    public function listTableForeignKeys(string $tableName)
+    public function listTableForeignKeys(string $tableName) : array
     {
         $tableName = $this->tableMaybeInvalid($tableName);
         return $this->getSchemaManager()->listTableForeignKeys($tableName);
@@ -906,7 +1002,8 @@ class Database
         if (method_exists($this->getConnection(), $method)) {
             return call_user_func_array([$this->getConnection(), $method], $arguments);
         }
-        throw new DBALException(
+
+        throw new \BadMethodCallException(
             sprintf(
                 "Call to undefined Method %s",
                 $method
