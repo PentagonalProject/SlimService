@@ -175,7 +175,12 @@ class Database
     /**
      * @var array
      */
-    protected $currentUserParams = [
+    protected $currentUserParams = [];
+
+    /**
+     * @var array
+     */
+    protected $defaultParams = [
         self::DB_CHARSET => self::DEFAULT_CHARSET,
     ];
 
@@ -319,7 +324,7 @@ class Database
         /**
          * Merge User Param
          */
-        $currentUserParams = array_merge($this->currentUserParams, $configs);
+        $currentUserParams = array_merge($this->defaultParams, $configs);
 
         $toSanity = [
             self::DB_HOST => 'dbhost',
